@@ -1,6 +1,7 @@
 # scMarkerMiner Database
 
 LLM 驱动的单细胞 Marker 基因自动挖掘系统。从 NCBI PMC 文献中批量提取细胞类型 Marker 信息，经多层标准化后入库，提供多维检索与可视化分析。
+**在线访问：[https://scmarkerminer.vercel.app](https://scmarkerminer.vercel.app/)**
 
 ## 架构
 
