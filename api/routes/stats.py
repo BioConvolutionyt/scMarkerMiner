@@ -15,6 +15,7 @@ from api.schemas import (
     FilterOptions,
     DistributionItem,
     DistributionData,
+    DashboardData,
 )
 from database.models import (
     Paper,
@@ -31,6 +32,10 @@ router = APIRouter(prefix="/api/stats", tags=["stats"])
 
 @router.get("/overview", response_model=OverviewStats)
 def overview(db: Session = Depends(get_db)):
+    return _build_overview(db)
+
+
+def _build_overview(db: Session) -> OverviewStats:
     return OverviewStats(
         total_papers=db.query(Paper).count(),
         total_markers=db.query(Marker).count(),
@@ -38,6 +43,48 @@ def overview(db: Session = Depends(get_db)):
         total_diseases=db.query(Disease).count(),
         total_tissues=db.query(Tissue).count(),
         total_entries=db.query(CellMarkerEntry).count(),
+    )
+
+
+def _build_distribution(db: Session) -> DistributionData:
+    cell_type_dist = (
+        db.query(CellType.name, func.count(CellMarkerEntry.id).label("cnt"))
+        .join(CellMarkerEntry, CellType.id == CellMarkerEntry.cell_type_id)
+        .group_by(CellType.name)
+        .order_by(func.count(CellMarkerEntry.id).desc())
+        .limit(15)
+        .all()
+    )
+    disease_dist = (
+        db.query(Disease.name, func.count(CellMarkerEntry.id).label("cnt"))
+        .join(CellMarkerEntry, Disease.id == CellMarkerEntry.disease_id)
+        .group_by(Disease.name)
+        .order_by(func.count(CellMarkerEntry.id).desc())
+        .limit(30)
+        .all()
+    )
+    tissue_dist = (
+        db.query(Tissue.name, func.count(CellMarkerEntry.id).label("cnt"))
+        .join(CellMarkerEntry, Tissue.id == CellMarkerEntry.tissue_id)
+        .filter(Tissue.name != "Not specified")
+        .group_by(Tissue.name)
+        .order_by(func.count(CellMarkerEntry.id).desc())
+        .limit(15)
+        .all()
+    )
+    return DistributionData(
+        cell_types=[DistributionItem(name=r[0], count=r[1]) for r in cell_type_dist],
+        diseases=[DistributionItem(name=r[0], count=r[1]) for r in disease_dist],
+        tissues=[DistributionItem(name=r[0], count=r[1]) for r in tissue_dist],
+    )
+
+
+@router.get("/dashboard", response_model=DashboardData)
+def dashboard(db: Session = Depends(get_db)):
+    """Single endpoint for Dashboard page — overview + distribution in one call."""
+    return DashboardData(
+        overview=_build_overview(db),
+        distribution=_build_distribution(db),
     )
 
 
@@ -53,11 +100,16 @@ def filter_options(
     每个字段的可选项只受 *其他* 字段的已选值约束，不受自身约束，
     从而允许用户在同一字段中继续添加更多选项。
     """
+    no_filters = not cell_type and not cell_subtype and not tissue and not disease
+    if no_filters:
+        return FilterOptions(
+            cell_types=sorted(r[0] for r in db.query(CellType.name).all()),
+            subtypes=sorted(r[0] for r in db.query(CellSubtype.name).all()),
+            tissues=sorted(r[0] for r in db.query(Tissue.name).all()),
+            diseases=sorted(r[0] for r in db.query(Disease.name).all()),
+        )
 
     def _cross_sq(*, skip: str):
-        """构建排除 skip 字段后、由其余已选字段过滤的 entry ID 子查询。
-        若排除后无任何过滤条件，返回 None（表示不需要过滤）。
-        """
         q = db.query(CellMarkerEntry.id)
         applied = False
         if cell_type and skip != "cell_type":
@@ -159,35 +211,4 @@ def bubble_data(
 
 @router.get("/distribution", response_model=DistributionData)
 def distribution_data(db: Session = Depends(get_db)):
-    """Dashboard 饼图所需的分布数据。"""
-    cell_type_dist = (
-        db.query(CellType.name, func.count(CellMarkerEntry.id).label("cnt"))
-        .join(CellMarkerEntry, CellType.id == CellMarkerEntry.cell_type_id)
-        .group_by(CellType.name)
-        .order_by(func.count(CellMarkerEntry.id).desc())
-        .limit(15)
-        .all()
-    )
-    disease_dist = (
-        db.query(Disease.name, func.count(CellMarkerEntry.id).label("cnt"))
-        .join(CellMarkerEntry, Disease.id == CellMarkerEntry.disease_id)
-        .group_by(Disease.name)
-        .order_by(func.count(CellMarkerEntry.id).desc())
-        .limit(30)
-        .all()
-    )
-    tissue_dist = (
-        db.query(Tissue.name, func.count(CellMarkerEntry.id).label("cnt"))
-        .join(CellMarkerEntry, Tissue.id == CellMarkerEntry.tissue_id)
-        .filter(Tissue.name != "Not specified")
-        .group_by(Tissue.name)
-        .order_by(func.count(CellMarkerEntry.id).desc())
-        .limit(15)
-        .all()
-    )
-
-    return DistributionData(
-        cell_types=[DistributionItem(name=r[0], count=r[1]) for r in cell_type_dist],
-        diseases=[DistributionItem(name=r[0], count=r[1]) for r in disease_dist],
-        tissues=[DistributionItem(name=r[0], count=r[1]) for r in tissue_dist],
-    )
+    return _build_distribution(db)
