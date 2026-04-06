@@ -1,9 +1,6 @@
 """
 api/main.py — FastAPI 应用入口
-
-开发模式：uvicorn api.main:app --reload
-生产模式：FastAPI 同时托管前端静态文件 (frontend/dist)
-API 文档：http://localhost:8000/docs
+API 文档：http://scmarkerminer.vercel.app/docs
 """
 
 import os
