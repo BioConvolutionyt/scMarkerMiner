@@ -20,6 +20,7 @@ const api = axios.create({
 })
 
 export const getOverview       = ()           => api.get('/stats/overview')
+export const getDashboard      = ()           => api.get('/stats/dashboard')
 export const getFilters        = (params)     => api.get('/stats/filters', { params })
 export const searchMarkers     = (params)     => api.get('/markers/search', { params })
 export const getMarkerDetail   = (symbol)     => api.get(`/markers/${symbol}`)
