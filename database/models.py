@@ -4,6 +4,7 @@ database/models.py — SQLAlchemy ORM 模型
 与 schema.sql 中的表结构一一对应，通过 ORM 进行 Python 层面的数据操作。
 """
 
+import os
 from datetime import datetime
 
 from sqlalchemy import (
@@ -23,6 +24,7 @@ from sqlalchemy.orm import (
     relationship,
     sessionmaker,
 )
+from sqlalchemy.pool import NullPool
 
 from config.settings import (
     SQLALCHEMY_DATABASE_URL,
@@ -39,13 +41,22 @@ class Base(DeclarativeBase):
     pass
 
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
+_IS_SERVERLESS = os.getenv("VERCEL") == "1"
+
+_engine_kwargs = dict(
     echo=SQLALCHEMY_ECHO,
-    pool_size=SQLALCHEMY_POOL_SIZE,
-    pool_recycle=300,
     pool_pre_ping=True,
 )
+
+if _IS_SERVERLESS:
+    _engine_kwargs["poolclass"] = NullPool
+    _db_url = SQLALCHEMY_DATABASE_URL + "&connect_timeout=5"
+else:
+    _engine_kwargs["pool_size"] = SQLALCHEMY_POOL_SIZE
+    _engine_kwargs["pool_recycle"] = 300
+    _db_url = SQLALCHEMY_DATABASE_URL
+
+engine = create_engine(_db_url, **_engine_kwargs)
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
