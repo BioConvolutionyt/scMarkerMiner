@@ -2,6 +2,7 @@
 api/routes/stats.py — 统计概览、筛选选项、可视化数据接口
 """
 
+import time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -16,6 +17,7 @@ from api.schemas import (
     DistributionItem,
     DistributionData,
     DashboardData,
+    SearchInitData,
 )
 from database.models import (
     Paper,
@@ -28,6 +30,24 @@ from database.models import (
 )
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
+
+# ---------------------------------------------------------------------------
+# TTL in-memory cache — survives Vercel warm starts, auto-expires after TTL
+# ---------------------------------------------------------------------------
+
+_cache: dict[str, tuple[object, float]] = {}
+_CACHE_TTL = 300  # 5 minutes
+
+def _get_cached(key: str, builder, ttl: int = _CACHE_TTL):
+    now = time.time()
+    hit = _cache.get(key)
+    if hit is not None:
+        val, ts = hit
+        if now - ts < ttl:
+            return val
+    val = builder()
+    _cache[key] = (val, now)
+    return val
 
 
 @router.get("/overview", response_model=OverviewStats)
@@ -82,10 +102,10 @@ def _build_distribution(db: Session) -> DistributionData:
 @router.get("/dashboard", response_model=DashboardData)
 def dashboard(db: Session = Depends(get_db)):
     """Single endpoint for Dashboard page — overview + distribution in one call."""
-    return DashboardData(
+    return _get_cached("dashboard", lambda: DashboardData(
         overview=_build_overview(db),
         distribution=_build_distribution(db),
-    )
+    ))
 
 
 @router.get("/filters", response_model=FilterOptions)
@@ -102,12 +122,12 @@ def filter_options(
     """
     no_filters = not cell_type and not cell_subtype and not tissue and not disease
     if no_filters:
-        return FilterOptions(
+        return _get_cached("filters_all", lambda: FilterOptions(
             cell_types=sorted(r[0] for r in db.query(CellType.name).all()),
             subtypes=sorted(r[0] for r in db.query(CellSubtype.name).all()),
             tissues=sorted(r[0] for r in db.query(Tissue.name).all()),
             diseases=sorted(r[0] for r in db.query(Disease.name).all()),
-        )
+        ))
 
     def _cross_sq(*, skip: str):
         q = db.query(CellMarkerEntry.id)
@@ -162,15 +182,11 @@ def filter_options(
     )
 
 
-@router.get("/bubble", response_model=list[BubblePoint])
-def bubble_data(
-    limit: int = Query(200, ge=10, le=10000),
-    cell_type: Optional[list[str]] = Query(None),
-    cell_subtype: Optional[list[str]] = Query(None),
-    tissue: Optional[list[str]] = Query(None),
-    disease: Optional[list[str]] = Query(None),
-    db: Session = Depends(get_db),
-):
+def do_bubble(
+    db: Session, limit=200,
+    cell_type=None, cell_subtype=None, tissue=None, disease=None,
+) -> list[BubblePoint]:
+    """Core bubble logic, usable from both the route and the init endpoint."""
     query = (
         db.query(
             CellType.name.label("cell_type"),
@@ -207,6 +223,38 @@ def bubble_data(
         BubblePoint(cell_type=r.cell_type, marker=r.marker, count=r.count)
         for r in rows
     ]
+
+
+@router.get("/bubble", response_model=list[BubblePoint])
+def bubble_data(
+    limit: int = Query(200, ge=10, le=10000),
+    cell_type: Optional[list[str]] = Query(None),
+    cell_subtype: Optional[list[str]] = Query(None),
+    tissue: Optional[list[str]] = Query(None),
+    disease: Optional[list[str]] = Query(None),
+    db: Session = Depends(get_db),
+):
+    return do_bubble(db, limit, cell_type, cell_subtype, tissue, disease)
+
+
+@router.get("/search-init", response_model=SearchInitData)
+def search_init(db: Session = Depends(get_db)):
+    """Combined endpoint for search page initial load.
+    Returns filters + default search results + bubble data in a single call,
+    reducing 3 cold starts to 1.
+    """
+    from api.routes.markers import do_search
+
+    return _get_cached("search_init", lambda: SearchInitData(
+        filters=FilterOptions(
+            cell_types=sorted(r[0] for r in db.query(CellType.name).all()),
+            subtypes=sorted(r[0] for r in db.query(CellSubtype.name).all()),
+            tissues=sorted(r[0] for r in db.query(Tissue.name).all()),
+            diseases=sorted(r[0] for r in db.query(Disease.name).all()),
+        ),
+        search=do_search(db),
+        bubble=do_bubble(db, limit=2000),
+    ))
 
 
 @router.get("/distribution", response_model=DistributionData)
