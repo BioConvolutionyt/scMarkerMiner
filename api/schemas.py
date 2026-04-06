@@ -125,3 +125,8 @@ class DistributionData(BaseModel):
     cell_types: list[DistributionItem]
     diseases: list[DistributionItem]
     tissues: list[DistributionItem]
+
+
+class DashboardData(BaseModel):
+    overview: OverviewStats
+    distribution: DistributionData
