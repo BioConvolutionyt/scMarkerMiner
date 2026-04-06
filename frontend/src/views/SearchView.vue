@@ -126,6 +126,9 @@
                 </div>
               </div>
             </template>
+            <div v-if="hasMoreRanking" class="ranking-load-more" @click="rankingLimit += RANKING_PAGE_SIZE">
+              Load more ({{ rankingTotalCount - rankingLimit }} remaining)
+            </div>
           </div>
         </div>
       </div>
@@ -149,6 +152,7 @@ const pageSize = 20
 const allBubbleData = ref([])
 const bubbleVisible = computed(() => allBubbleData.value.length > 0)
 const chartBubbleData = computed(() => allBubbleData.value.slice(0, 200))
+let lastBubbleKey = ''
 
 const filters = ref({ cell_type: [], cell_subtype: [], tissue: [], disease: [], marker: '' })
 const options = ref({ cell_types: [], subtypes: [], tissues: [], diseases: [] })
@@ -174,7 +178,10 @@ const statusType = (s) =>
 
 // ---- Ranking ----
 
-const rankingGroups = computed(() => {
+const RANKING_PAGE_SIZE = 500
+const rankingLimit = ref(RANKING_PAGE_SIZE)
+
+const rankingGroupsFull = computed(() => {
   const groups = {}
   for (const d of allBubbleData.value) {
     if (!groups[d.cell_type]) groups[d.cell_type] = []
@@ -187,6 +194,25 @@ const rankingGroups = computed(() => {
     }))
     .sort((a, b) => b.markers.length - a.markers.length)
 })
+
+const rankingGroups = computed(() => {
+  const limit = rankingLimit.value
+  let count = 0
+  const result = []
+  for (const g of rankingGroupsFull.value) {
+    if (count >= limit) break
+    const remaining = limit - count
+    const sliced = g.markers.slice(0, remaining)
+    result.push({ cell_type: g.cell_type, markers: sliced })
+    count += sliced.length
+  }
+  return result
+})
+
+const rankingTotalCount = computed(() =>
+  rankingGroupsFull.value.reduce((s, g) => s + g.markers.length, 0)
+)
+const hasMoreRanking = computed(() => rankingLimit.value < rankingTotalCount.value)
 
 const maxRankCount = computed(() => {
   let m = 1
@@ -210,7 +236,7 @@ async function copyMarker(symbol) {
 
 async function exportRanking(fmt) {
   const rows = []
-  for (const g of rankingGroups.value) {
+  for (const g of rankingGroupsFull.value) {
     for (const m of g.markers) {
       rows.push({ 'Cell Type': g.cell_type, Marker: m.marker, Citations: m.count })
     }
@@ -306,25 +332,40 @@ async function fetchFilterOptions(depth = 0) {
   if (changed) await fetchFilterOptions(depth + 1)
 }
 
-async function onFilterChange() {
+let _filterTimer = null
+function onFilterChange() {
   page.value = 1
-  await fetchFilterOptions()
-  await doSearch()
+  lastBubbleKey = ''
+  clearTimeout(_filterTimer)
+  _filterTimer = setTimeout(async () => {
+    await fetchFilterOptions()
+    await doSearch()
+  }, 300)
 }
 
 async function doSearch() {
   loading.value = true
   try {
-    const params = buildSearchParams()
-    const [searchRes, bubbleRes] = await Promise.all([
-      searchMarkers(params),
-      getBubbleData({ ...buildFilterParams(), limit: 10000 }),
-    ])
-    results.value = searchRes.data.results
-    total.value = searchRes.data.total
-    allBubbleData.value = bubbleRes.data
-    await nextTick()
-    renderBubble(chartBubbleData.value)
+    const filterParams = buildFilterParams()
+    const bubbleKey = JSON.stringify(filterParams)
+    const needBubble = bubbleKey !== lastBubbleKey
+
+    const promises = [searchMarkers(buildSearchParams())]
+    if (needBubble) {
+      promises.push(getBubbleData({ ...filterParams, limit: 2000 }))
+    }
+
+    const settled = await Promise.all(promises)
+    results.value = settled[0].data.results
+    total.value = settled[0].data.total
+
+    if (needBubble) {
+      allBubbleData.value = settled[1].data
+      lastBubbleKey = bubbleKey
+      rankingLimit.value = RANKING_PAGE_SIZE
+      await nextTick()
+      renderBubble(chartBubbleData.value)
+    }
   } finally {
     loading.value = false
   }
@@ -415,6 +456,7 @@ function renderBubble(data) {
 function resetFilters() {
   filters.value = { cell_type: [], cell_subtype: [], tissue: [], disease: [], marker: '' }
   page.value = 1
+  lastBubbleKey = ''
   fetchFilterOptions().then(() => doSearch())
 }
 
@@ -431,6 +473,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  clearTimeout(_filterTimer)
   window.removeEventListener('resize', handleResize)
   bubbleChart?.dispose()
 })
@@ -695,5 +738,19 @@ onUnmounted(() => {
   flex-shrink: 0;
   min-width: 24px;
   text-align: right;
+}
+
+.ranking-load-more {
+  padding: 12px 14px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--primary);
+  cursor: pointer;
+  font-weight: 500;
+  border-top: 1px solid var(--border-color);
+}
+
+.ranking-load-more:hover {
+  background: #eff6ff;
 }
 </style>
