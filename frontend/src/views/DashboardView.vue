@@ -82,7 +82,7 @@
 import { ref, onMounted, onUnmounted, markRaw } from 'vue'
 import { Search, Document, Coin, FirstAidKit, List } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import { getOverview, getDistribution } from '../api'
+import { getDashboard } from '../api'
 
 const statCards = ref([
   { label: 'Papers',     value: null, icon: markRaw(Document),        color: 'linear-gradient(135deg,#2e77d0,#5a9ae6)' },
@@ -173,15 +173,14 @@ function handleResize() {
 }
 
 onMounted(async () => {
-  const [overviewRes, distRes] = await Promise.all([getOverview(), getDistribution()])
+  const res = await getDashboard()
+  const { overview, distribution } = res.data
 
-  const s = overviewRes.data
-  const vals = [s.total_papers, s.total_markers, s.total_cell_types, s.total_diseases, s.total_tissues, s.total_entries]
+  const vals = [overview.total_papers, overview.total_markers, overview.total_cell_types, overview.total_diseases, overview.total_tissues, overview.total_entries]
   statCards.value = statCards.value.map((c, i) => ({ ...c, value: vals[i] }))
 
-  const d = distRes.data
-  cellTypePie = renderPie(cellTypePieRef.value, d.cell_types)
-  tissueBar   = renderHorizontalBar(tissueBarRef.value, d.tissues)
+  cellTypePie = renderPie(cellTypePieRef.value, distribution.cell_types)
+  tissueBar   = renderHorizontalBar(tissueBarRef.value, distribution.tissues)
 
   window.addEventListener('resize', handleResize)
 })
