@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+*.egg
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.cursor/
+
+# Environment & secrets
+.env
+.env.*
+
+# Frontend build output (Vercel auto-builds)
+frontend/dist/
+frontend/node_modules/
+
+# Pipeline intermediate data
+data/raw_xml/
+data/processed/
+data/extracted/
+data/validated/
+data/logs/
+data/hgnc_complete_set.txt
+data/fetched_pmids.txt
+
+# Database dumps
+*.sql
+
+# OS files
+Thumbs.db
+.DS_Store
