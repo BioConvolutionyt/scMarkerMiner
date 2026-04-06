@@ -34,17 +34,39 @@ router = APIRouter(prefix="/api/markers", tags=["markers"])
 # GET /api/markers/search — 多维检索
 # =====================================================================
 
-@router.get("/search", response_model=MarkerSearchResponse)
-def search_markers(
-    cell_type: Optional[list[str]] = Query(None, description="细胞类型（多选）"),
-    cell_subtype: Optional[list[str]] = Query(None, description="细胞亚型（多选）"),
-    marker: Optional[str] = Query(None, description="Marker 基因符号（模糊）"),
-    tissue: Optional[list[str]] = Query(None, description="组织类型（多选）"),
-    disease: Optional[list[str]] = Query(None, description="疾病类型（多选）"),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(API_PAGE_SIZE, ge=1, le=API_MAX_PAGE_SIZE),
-    db: Session = Depends(get_db),
-):
+def do_search(
+    db: Session,
+    cell_type=None, cell_subtype=None, marker=None,
+    tissue=None, disease=None, page=1, page_size=20,
+) -> MarkerSearchResponse:
+    """Core search logic, usable from both the route and the init endpoint."""
+
+    def _apply_filters(q):
+        if cell_type:
+            q = q.filter(CellType.name.in_(cell_type))
+        if cell_subtype:
+            q = q.join(CellSubtype, CellMarkerEntry.cell_subtype_id == CellSubtype.id).filter(
+                CellSubtype.name.in_(cell_subtype)
+            )
+        if marker:
+            q = q.filter(Marker.symbol.ilike(f"%{marker}%"))
+        if tissue:
+            q = q.join(Tissue, CellMarkerEntry.tissue_id == Tissue.id).filter(
+                Tissue.name.in_(tissue)
+            )
+        if disease:
+            q = q.join(Disease, CellMarkerEntry.disease_id == Disease.id).filter(
+                Disease.name.in_(disease)
+            )
+        return q
+
+    count_q = (
+        db.query(func.count(CellMarkerEntry.id))
+        .join(Marker, CellMarkerEntry.marker_id == Marker.id)
+        .join(CellType, CellMarkerEntry.cell_type_id == CellType.id)
+    )
+    total = _apply_filters(count_q).scalar()
+
     cite_sq = (
         db.query(
             CellMarkerEntry.marker_id,
@@ -54,7 +76,7 @@ def search_markers(
         .subquery()
     )
 
-    query = (
+    data_q = (
         db.query(
             Marker.symbol,
             CellType.name.label("cell_type"),
@@ -75,41 +97,49 @@ def search_markers(
     )
 
     if cell_type:
-        query = query.filter(CellType.name.in_(cell_type))
+        data_q = data_q.filter(CellType.name.in_(cell_type))
     if cell_subtype:
-        query = query.filter(CellSubtype.name.in_(cell_subtype))
+        data_q = data_q.filter(CellSubtype.name.in_(cell_subtype))
     if marker:
-        query = query.filter(Marker.symbol.ilike(f"%{marker}%"))
+        data_q = data_q.filter(Marker.symbol.ilike(f"%{marker}%"))
     if tissue:
-        query = query.filter(Tissue.name.in_(tissue))
+        data_q = data_q.filter(Tissue.name.in_(tissue))
     if disease:
-        query = query.filter(Disease.name.in_(disease))
+        data_q = data_q.filter(Disease.name.in_(disease))
 
-    total = query.count()
     rows = (
-        query.order_by(cite_sq.c.cite_count.desc(), Marker.symbol, CellType.name)
+        data_q.order_by(cite_sq.c.cite_count.desc(), Marker.symbol, CellType.name)
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
     )
 
-    results = [
-        MarkerEntryItem(
-            marker=r.symbol,
-            cell_type=r.cell_type,
-            cell_subtype=r.cell_subtype,
-            tissue=r.tissue,
-            disease=r.disease,
-            pmid=r.pmid,
-            pmcid=r.pmcid,
-            marker_status=r.marker_status,
-        )
-        for r in rows
-    ]
-
     return MarkerSearchResponse(
-        total=total, page=page, page_size=page_size, results=results
+        total=total, page=page, page_size=page_size,
+        results=[
+            MarkerEntryItem(
+                marker=r.symbol, cell_type=r.cell_type,
+                cell_subtype=r.cell_subtype, tissue=r.tissue,
+                disease=r.disease, pmid=r.pmid,
+                pmcid=r.pmcid, marker_status=r.marker_status,
+            )
+            for r in rows
+        ],
     )
+
+
+@router.get("/search", response_model=MarkerSearchResponse)
+def search_markers(
+    cell_type: Optional[list[str]] = Query(None, description="细胞类型（多选）"),
+    cell_subtype: Optional[list[str]] = Query(None, description="细胞亚型（多选）"),
+    marker: Optional[str] = Query(None, description="Marker 基因符号（模糊）"),
+    tissue: Optional[list[str]] = Query(None, description="组织类型（多选）"),
+    disease: Optional[list[str]] = Query(None, description="疾病类型（多选）"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(API_PAGE_SIZE, ge=1, le=API_MAX_PAGE_SIZE),
+    db: Session = Depends(get_db),
+):
+    return do_search(db, cell_type, cell_subtype, marker, tissue, disease, page, page_size)
 
 
 # =====================================================================
