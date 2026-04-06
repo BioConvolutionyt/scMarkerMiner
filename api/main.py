@@ -6,6 +6,7 @@ api/main.py — FastAPI 应用入口
 API 文档：http://localhost:8000/docs
 """
 
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -20,11 +21,13 @@ from database.models import init_db
 from api.routes import markers, cells, stats, export
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+IS_VERCEL = os.getenv("VERCEL") == "1"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    if not IS_VERCEL:
+        init_db()
     yield
 
 
