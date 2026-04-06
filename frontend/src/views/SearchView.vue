@@ -141,7 +141,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { Download, DocumentCopy } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
-import { searchMarkers, getFilters, getBubbleData } from '../api'
+import { searchMarkers, getFilters, getBubbleData, getSearchInit } from '../api'
 
 const loading = ref(false)
 const results = ref([])
@@ -338,8 +338,29 @@ function onFilterChange() {
   lastBubbleKey = ''
   clearTimeout(_filterTimer)
   _filterTimer = setTimeout(async () => {
-    await fetchFilterOptions()
-    await doSearch()
+    const filterParams = buildFilterParams()
+    const [filtersRes] = await Promise.all([
+      getFilters(filterParams),
+      doSearch(),
+    ])
+    options.value = filtersRes.data
+
+    let changed = false
+    const reconcile = (arr, available) => {
+      const kept = arr.filter(v => available.includes(v))
+      if (kept.length !== arr.length) { changed = true; return kept }
+      return arr
+    }
+    filters.value.cell_type    = reconcile(filters.value.cell_type,    filtersRes.data.cell_types)
+    filters.value.cell_subtype = reconcile(filters.value.cell_subtype, filtersRes.data.subtypes)
+    filters.value.tissue       = reconcile(filters.value.tissue,       filtersRes.data.tissues)
+    filters.value.disease      = reconcile(filters.value.disease,      filtersRes.data.diseases)
+
+    if (changed) {
+      lastBubbleKey = ''
+      await fetchFilterOptions()
+      await doSearch()
+    }
   }, 300)
 }
 
@@ -467,8 +488,20 @@ watch(hasActiveFilters, () => {
 })
 
 onMounted(async () => {
-  await fetchFilterOptions()
-  await doSearch()
+  loading.value = true
+  try {
+    const res = await getSearchInit()
+    const { filters: f, search: s, bubble: b } = res.data
+    options.value = f
+    results.value = s.results
+    total.value = s.total
+    allBubbleData.value = b
+    lastBubbleKey = JSON.stringify({})
+    await nextTick()
+    renderBubble(chartBubbleData.value)
+  } finally {
+    loading.value = false
+  }
   window.addEventListener('resize', handleResize)
 })
 
