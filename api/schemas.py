@@ -130,3 +130,9 @@ class DistributionData(BaseModel):
 class DashboardData(BaseModel):
     overview: OverviewStats
     distribution: DistributionData
+
+
+class SearchInitData(BaseModel):
+    filters: FilterOptions
+    search: MarkerSearchResponse
+    bubble: list[BubblePoint]
