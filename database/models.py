@@ -46,17 +46,16 @@ _IS_SERVERLESS = os.getenv("VERCEL") == "1"
 _engine_kwargs = dict(
     echo=SQLALCHEMY_ECHO,
     pool_pre_ping=True,
+    connect_args={"connect_timeout": 10},
 )
 
 if _IS_SERVERLESS:
     _engine_kwargs["poolclass"] = NullPool
-    _db_url = SQLALCHEMY_DATABASE_URL + "&connect_timeout=5"
 else:
     _engine_kwargs["pool_size"] = SQLALCHEMY_POOL_SIZE
     _engine_kwargs["pool_recycle"] = 300
-    _db_url = SQLALCHEMY_DATABASE_URL
 
-engine = create_engine(_db_url, **_engine_kwargs)
+engine = create_engine(SQLALCHEMY_DATABASE_URL, **_engine_kwargs)
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
