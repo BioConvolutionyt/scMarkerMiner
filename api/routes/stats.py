@@ -64,11 +64,11 @@ def _build_overview(db: Session) -> OverviewStats:
         "(SELECT COUNT(*) FROM diseases) AS d, "
         "(SELECT COUNT(*) FROM tissues) AS t, "
         "(SELECT COUNT(*) FROM cell_marker_entries) AS e"
-    )).one()
+    )).mappings().one()
     return OverviewStats(
-        total_papers=row.p, total_markers=row.m,
-        total_cell_types=row.ct, total_diseases=row.d,
-        total_tissues=row.t, total_entries=row.e,
+        total_papers=row["p"], total_markers=row["m"],
+        total_cell_types=row["ct"], total_diseases=row["d"],
+        total_tissues=row["t"], total_entries=row["e"],
     )
 
 
