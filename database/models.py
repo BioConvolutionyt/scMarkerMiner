@@ -120,9 +120,10 @@ class CellSubtype(Base):
 class Marker(Base):
     __tablename__ = "markers"
 
-    id     = Column(Integer, primary_key=True, autoincrement=True)
-    symbol = Column(String(100), nullable=False, unique=True)
-    name   = Column(String(500))
+    id              = Column(Integer, primary_key=True, autoincrement=True)
+    symbol          = Column(String(100), nullable=False, unique=True)
+    name            = Column(String(500))
+    citation_count  = Column(Integer, nullable=False, default=0, index=True)
 
     entries = relationship("CellMarkerEntry", back_populates="marker")
 
