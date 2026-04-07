@@ -153,6 +153,7 @@ const allBubbleData = ref([])
 const bubbleVisible = computed(() => allBubbleData.value.length > 0)
 const chartBubbleData = computed(() => allBubbleData.value.slice(0, 200))
 let lastBubbleKey = ''
+let totalKnown = false
 
 const filters = ref({ cell_type: [], cell_subtype: [], tissue: [], disease: [], marker: '' })
 const options = ref({ cell_types: [], subtypes: [], tissues: [], diseases: [] })
@@ -310,6 +311,7 @@ function buildFilterParams() {
 function buildSearchParams() {
   const p = { ...buildFilterParams(), page: page.value, page_size: pageSize }
   if (filters.value.marker) p.marker = filters.value.marker
+  if (totalKnown && total.value > 0) p.total_hint = total.value
   return p
 }
 
@@ -336,6 +338,7 @@ let _filterTimer = null
 function onFilterChange() {
   page.value = 1
   lastBubbleKey = ''
+  totalKnown = false
   clearTimeout(_filterTimer)
   _filterTimer = setTimeout(async () => {
     const filterParams = buildFilterParams()
@@ -379,6 +382,7 @@ async function doSearch() {
     const settled = await Promise.all(promises)
     results.value = settled[0].data.results
     total.value = settled[0].data.total
+    totalKnown = true
 
     if (needBubble) {
       allBubbleData.value = settled[1].data
@@ -478,6 +482,7 @@ function resetFilters() {
   filters.value = { cell_type: [], cell_subtype: [], tissue: [], disease: [], marker: '' }
   page.value = 1
   lastBubbleKey = ''
+  totalKnown = false
   fetchFilterOptions().then(() => doSearch())
 }
 
@@ -495,6 +500,7 @@ onMounted(async () => {
     options.value = f
     results.value = s.results
     total.value = s.total
+    totalKnown = true
     allBubbleData.value = b
     lastBubbleKey = JSON.stringify({})
     await nextTick()
