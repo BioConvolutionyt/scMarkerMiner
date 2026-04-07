@@ -81,7 +81,7 @@
     <!-- Entries table -->
     <div class="entries-card">
       <div class="entries-header">All entries from literature</div>
-      <el-table :data="pagedEntries" stripe size="small"
+      <el-table :data="entries" v-loading="entriesLoading" stripe size="small"
                 :header-cell-style="{ background: '#f8fafc', color: '#374151', fontWeight: 600 }">
         <el-table-column prop="cell_type" label="Cell Type" width="140" />
         <el-table-column prop="cell_subtype" label="Subtype" min-width="180" show-overflow-tooltip />
@@ -97,12 +97,13 @@
         </el-table-column>
       </el-table>
       <div class="entries-footer">
-        <span class="entry-count">{{ allEntries.length }} entries total</span>
+        <span class="entry-count">{{ totalEntries }} entries total</span>
         <el-pagination
           v-model:current-page="entryPage"
           :page-size="entryPageSize"
-          :total="allEntries.length"
+          :total="totalEntries"
           layout="prev, pager, next, jumper"
+          @current-change="fetchEntries"
         />
       </div>
     </div>
@@ -117,21 +118,36 @@ import { getMarkerDetail } from '../api'
 
 const route = useRoute()
 const loading = ref(true)
+const entriesLoading = ref(false)
 const detail = ref({})
 
 const entryPage = ref(1)
-const entryPageSize = 15
+const entryPageSize = 20
+const entries = ref([])
+const totalEntries = ref(0)
 
-const allEntries = computed(() => detail.value.entries || [])
-const pagedEntries = computed(() => {
-  const start = (entryPage.value - 1) * entryPageSize
-  return allEntries.value.slice(start, start + entryPageSize)
-})
+async function fetchEntries(pg) {
+  if (pg != null) entryPage.value = pg
+  entriesLoading.value = true
+  try {
+    const res = await getMarkerDetail(route.params.symbol, {
+      page: entryPage.value,
+      page_size: entryPageSize,
+    })
+    entries.value = res.data.entries
+    totalEntries.value = res.data.total_entries
+    if (!detail.value.symbol) detail.value = res.data
+  } finally {
+    entriesLoading.value = false
+  }
+}
 
 onMounted(async () => {
   try {
     const res = await getMarkerDetail(route.params.symbol)
     detail.value = res.data
+    entries.value = res.data.entries
+    totalEntries.value = res.data.total_entries
   } finally {
     loading.value = false
   }
