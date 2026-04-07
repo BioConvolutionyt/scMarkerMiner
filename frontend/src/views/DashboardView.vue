@@ -81,7 +81,11 @@
 <script setup>
 import { ref, onMounted, onUnmounted, markRaw } from 'vue'
 import { Search, Document, Coin, FirstAidKit, List } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import { init as echartsInit, use } from 'echarts/core'
+import { PieChart, BarChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+use([PieChart, BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 import { getDashboard } from '../api'
 
 const statCards = ref([
@@ -106,7 +110,7 @@ const COLORS = [
 
 function renderPie(el, data) {
   if (!el || !data.length) return null
-  const chart = echarts.init(el)
+  const chart = echartsInit(el)
   chart.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
     legend: {
@@ -135,7 +139,7 @@ function renderPie(el, data) {
 
 function renderHorizontalBar(el, data) {
   if (!el || !data.length) return null
-  const chart = echarts.init(el)
+  const chart = echartsInit(el)
   const sorted = [...data].sort((a, b) => a.count - b.count)
   chart.setOption({
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
