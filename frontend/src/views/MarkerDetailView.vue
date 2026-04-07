@@ -16,7 +16,12 @@
       <div class="summary-card">
         <div class="summary-card-header">
           <span class="summary-card-icon" style="background: linear-gradient(135deg,#2e77d0,#5a9ae6)">
-            <el-icon :size="16"><Cellphone /></el-icon>
+            <svg viewBox="0 0 24 24" width="16" height="16">
+              <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".85" />
+              <circle cx="10" cy="11" r="3.5" fill="currentColor" opacity=".7" />
+              <circle cx="15" cy="8" r="1.2" fill="currentColor" opacity=".4" />
+              <circle cx="16" cy="15" r="1" fill="currentColor" opacity=".35" />
+            </svg>
           </span>
           Cell Types
         </div>
@@ -42,7 +47,14 @@
       <div class="summary-card">
         <div class="summary-card-header">
           <span class="summary-card-icon" style="background: linear-gradient(135deg,#10b981,#34d399)">
-            <el-icon :size="16"><OfficeBuilding /></el-icon>
+            <svg viewBox="0 0 24 24" width="16" height="16"
+                 stroke="currentColor" fill="none" stroke-linecap="round">
+              <path d="M12 2v7" stroke-width="2.2" />
+              <path d="M12 9 Q8 13 6 21" stroke-width="1.7" />
+              <path d="M12 9 Q16 13 18 21" stroke-width="1.7" />
+              <path d="M8.2 14 Q5.5 13.5 3.5 16" stroke-width="1.2" opacity=".55" />
+              <path d="M15.8 14 Q18.5 13.5 20.5 16" stroke-width="1.2" opacity=".55" />
+            </svg>
           </span>
           Tissues
         </div>
@@ -100,7 +112,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowLeft, Cellphone, Share, OfficeBuilding, FirstAidKit } from '@element-plus/icons-vue'
+import { ArrowLeft, Share, FirstAidKit } from '@element-plus/icons-vue'
 import { getMarkerDetail } from '../api'
 
 const route = useRoute()
