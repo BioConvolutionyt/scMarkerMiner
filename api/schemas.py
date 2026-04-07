@@ -57,6 +57,9 @@ class MarkerDetailResponse(BaseModel):
     subtypes: list[str]
     tissues: list[str]
     diseases: list[str]
+    total_entries: int
+    page: int
+    page_size: int
     entries: list[MarkerEntryItem]
 
 
