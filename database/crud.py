@@ -8,6 +8,7 @@ database/crud.py — 数据库 CRUD 操作
 import logging
 from typing import Optional
 
+from sqlalchemy import func, distinct, text
 from sqlalchemy.orm import Session
 
 from database.models import (
@@ -21,6 +22,22 @@ from database.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def refresh_citation_counts(db: Session) -> int:
+    """批量刷新 markers.citation_count = COUNT(DISTINCT paper_id)。"""
+    db.execute(text(
+        "UPDATE markers m "
+        "JOIN ("
+        "  SELECT marker_id, COUNT(DISTINCT paper_id) AS cnt "
+        "  FROM cell_marker_entries GROUP BY marker_id"
+        ") agg ON m.id = agg.marker_id "
+        "SET m.citation_count = agg.cnt"
+    ))
+    db.commit()
+    updated = db.query(Marker).filter(Marker.citation_count > 0).count()
+    logger.info("Refreshed citation_count for %d markers", updated)
+    return updated
 
 
 # =====================================================================
