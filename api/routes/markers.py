@@ -5,7 +5,7 @@ api/routes/markers.py — Marker 检索、排行、详情接口
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, distinct
+from sqlalchemy import func, distinct, text
 from sqlalchemy.orm import Session
 
 from api.deps import get_db
@@ -73,15 +73,6 @@ def do_search(
         )
         total = _apply_filters(count_q).scalar()
 
-    cite_sq = (
-        db.query(
-            CellMarkerEntry.marker_id,
-            func.count(distinct(CellMarkerEntry.paper_id)).label("cite_count"),
-        )
-        .group_by(CellMarkerEntry.marker_id)
-        .subquery()
-    )
-
     data_q = (
         db.query(
             Marker.symbol,
@@ -99,7 +90,6 @@ def do_search(
         .outerjoin(Tissue, CellMarkerEntry.tissue_id == Tissue.id)
         .outerjoin(Disease, CellMarkerEntry.disease_id == Disease.id)
         .join(Paper, CellMarkerEntry.paper_id == Paper.id)
-        .outerjoin(cite_sq, Marker.id == cite_sq.c.marker_id)
     )
 
     if cell_type:
@@ -114,7 +104,7 @@ def do_search(
         data_q = data_q.filter(Disease.name.in_(disease))
 
     rows = (
-        data_q.order_by(cite_sq.c.cite_count.desc(), Marker.symbol, CellType.name)
+        data_q.order_by(Marker.citation_count.desc(), Marker.symbol, CellType.name)
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
@@ -212,6 +202,8 @@ def marker_ranking(
 @router.get("/{symbol}", response_model=MarkerDetailResponse)
 def marker_detail(
     symbol: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(API_PAGE_SIZE, ge=1, le=API_MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
 ):
     marker_obj = db.query(Marker).filter(Marker.symbol == symbol).first()
@@ -220,6 +212,12 @@ def marker_detail(
         raise HTTPException(status_code=404, detail=f"Marker '{symbol}' not found")
 
     agg = _get_marker_aggregates(db, symbol)
+
+    total_entries = (
+        db.query(func.count(CellMarkerEntry.id))
+        .filter(CellMarkerEntry.marker_id == marker_obj.id)
+        .scalar()
+    )
 
     entries_q = (
         db.query(
@@ -239,6 +237,9 @@ def marker_detail(
         .outerjoin(Disease, CellMarkerEntry.disease_id == Disease.id)
         .join(Paper, CellMarkerEntry.paper_id == Paper.id)
         .filter(Marker.symbol == symbol)
+        .order_by(CellType.name, Paper.pmcid)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
         .all()
     )
 
@@ -249,6 +250,9 @@ def marker_detail(
         subtypes=agg["subtypes"],
         tissues=agg["tissues"],
         diseases=agg["diseases"],
+        total_entries=total_entries,
+        page=page,
+        page_size=page_size,
         entries=[
             MarkerEntryItem(
                 marker=e.symbol,
@@ -270,52 +274,33 @@ def marker_detail(
 # =====================================================================
 
 def _get_marker_aggregates(db: Session, symbol: str) -> dict:
-    """获取单个 Marker 的聚合信息（关联的细胞类型、组织、疾病列表）。"""
-    base = (
-        db.query(CellMarkerEntry)
-        .join(Marker, CellMarkerEntry.marker_id == Marker.id)
-        .filter(Marker.symbol == symbol)
-    )
+    """获取单个 Marker 的聚合信息，使用 1 条 SQL + GROUP_CONCAT 完成。"""
+    row = db.execute(text(
+        "SELECT m.citation_count, "
+        "  GROUP_CONCAT(DISTINCT ct.name ORDER BY ct.name SEPARATOR '||') AS cell_types, "
+        "  GROUP_CONCAT(DISTINCT cs.name ORDER BY cs.name SEPARATOR '||') AS subtypes, "
+        "  GROUP_CONCAT(DISTINCT t.name ORDER BY t.name SEPARATOR '||') AS tissues, "
+        "  GROUP_CONCAT(DISTINCT d.name ORDER BY d.name SEPARATOR '||') AS diseases "
+        "FROM cell_marker_entries e "
+        "JOIN markers m ON e.marker_id = m.id "
+        "JOIN cell_types ct ON e.cell_type_id = ct.id "
+        "LEFT JOIN cell_subtypes cs ON e.cell_subtype_id = cs.id "
+        "LEFT JOIN tissues t ON e.tissue_id = t.id "
+        "LEFT JOIN diseases d ON e.disease_id = d.id "
+        "WHERE m.symbol = :sym "
+        "GROUP BY m.id"
+    ), {"sym": symbol}).first()
 
-    citation_count = base.with_entities(
-        func.count(distinct(CellMarkerEntry.paper_id))
-    ).scalar()
+    if not row:
+        return {"citation_count": 0, "cell_types": [], "subtypes": [], "tissues": [], "diseases": []}
 
-    cell_types = [
-        r[0] for r in
-        base.join(CellType, CellMarkerEntry.cell_type_id == CellType.id)
-        .with_entities(distinct(CellType.name))
-        .all()
-    ]
-
-    subtypes = [
-        r[0] for r in
-        base.join(CellSubtype, CellMarkerEntry.cell_subtype_id == CellSubtype.id)
-        .with_entities(distinct(CellSubtype.name))
-        .all()
-        if r[0]
-    ]
-
-    tissues = [
-        r[0] for r in
-        base.join(Tissue, CellMarkerEntry.tissue_id == Tissue.id)
-        .with_entities(distinct(Tissue.name))
-        .all()
-        if r[0]
-    ]
-
-    diseases = [
-        r[0] for r in
-        base.join(Disease, CellMarkerEntry.disease_id == Disease.id)
-        .with_entities(distinct(Disease.name))
-        .all()
-        if r[0]
-    ]
+    def _split(val):
+        return sorted(val.split("||")) if val else []
 
     return {
-        "citation_count": citation_count or 0,
-        "cell_types": sorted(cell_types),
-        "subtypes": sorted(subtypes),
-        "tissues": sorted(tissues),
-        "diseases": sorted(diseases),
+        "citation_count": row.citation_count or 0,
+        "cell_types": _split(row.cell_types),
+        "subtypes": _split(row.subtypes),
+        "tissues": _split(row.tissues),
+        "diseases": _split(row.diseases),
     }
