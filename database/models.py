@@ -169,6 +169,8 @@ class CellMarkerEntry(Base):
         Index("idx_disease", "disease_id"),
         Index("idx_tissue", "tissue_id"),
         Index("idx_paper", "paper_id"),
+        Index("idx_marker_paper", "marker_id", "paper_id"),
+        Index("idx_celltype_marker", "cell_type_id", "marker_id", "paper_id"),
     )
 
     cell_type    = relationship("CellType",    back_populates="entries")
