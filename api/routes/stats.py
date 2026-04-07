@@ -6,7 +6,7 @@ import time
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, distinct
+from sqlalchemy import func, distinct, text
 from sqlalchemy.orm import Session
 
 from api.deps import get_db
@@ -56,13 +56,19 @@ def overview(db: Session = Depends(get_db)):
 
 
 def _build_overview(db: Session) -> OverviewStats:
+    row = db.execute(text(
+        "SELECT "
+        "(SELECT COUNT(*) FROM papers) AS p, "
+        "(SELECT COUNT(*) FROM markers) AS m, "
+        "(SELECT COUNT(*) FROM cell_types) AS ct, "
+        "(SELECT COUNT(*) FROM diseases) AS d, "
+        "(SELECT COUNT(*) FROM tissues) AS t, "
+        "(SELECT COUNT(*) FROM cell_marker_entries) AS e"
+    )).one()
     return OverviewStats(
-        total_papers=db.query(Paper).count(),
-        total_markers=db.query(Marker).count(),
-        total_cell_types=db.query(CellType).count(),
-        total_diseases=db.query(Disease).count(),
-        total_tissues=db.query(Tissue).count(),
-        total_entries=db.query(CellMarkerEntry).count(),
+        total_papers=row.p, total_markers=row.m,
+        total_cell_types=row.ct, total_diseases=row.d,
+        total_tissues=row.t, total_entries=row.e,
     )
 
 
@@ -129,57 +135,66 @@ def filter_options(
             diseases=sorted(r[0] for r in db.query(Disease.name).all()),
         ))
 
-    def _cross_sq(*, skip: str):
-        q = db.query(CellMarkerEntry.id)
-        applied = False
-        if cell_type and skip != "cell_type":
-            q = q.join(CellType, CellMarkerEntry.cell_type_id == CellType.id).filter(
-                CellType.name.in_(cell_type)
-            )
-            applied = True
-        if cell_subtype and skip != "cell_subtype":
-            q = q.join(
-                CellSubtype, CellMarkerEntry.cell_subtype_id == CellSubtype.id
-            ).filter(CellSubtype.name.in_(cell_subtype))
-            applied = True
-        if tissue and skip != "tissue":
-            q = q.join(Tissue, CellMarkerEntry.tissue_id == Tissue.id).filter(
-                Tissue.name.in_(tissue)
-            )
-            applied = True
-        if disease and skip != "disease":
-            q = q.join(Disease, CellMarkerEntry.disease_id == Disease.id).filter(
-                Disease.name.in_(disease)
-            )
-            applied = True
-        return q.scalar_subquery() if applied else None
+    import hashlib, json as _json
+    cache_key = "filters_" + hashlib.md5(
+        _json.dumps({"ct": cell_type, "cs": cell_subtype, "t": tissue, "d": disease},
+                     sort_keys=True).encode()
+    ).hexdigest()
 
-    def _opts(model, name_col, fk_col, sq):
-        q = db.query(distinct(name_col)).join(
-            CellMarkerEntry, model.id == fk_col
+    def _build_filtered():
+        def _cross_sq(*, skip: str):
+            q = db.query(CellMarkerEntry.id)
+            applied = False
+            if cell_type and skip != "cell_type":
+                q = q.join(CellType, CellMarkerEntry.cell_type_id == CellType.id).filter(
+                    CellType.name.in_(cell_type)
+                )
+                applied = True
+            if cell_subtype and skip != "cell_subtype":
+                q = q.join(
+                    CellSubtype, CellMarkerEntry.cell_subtype_id == CellSubtype.id
+                ).filter(CellSubtype.name.in_(cell_subtype))
+                applied = True
+            if tissue and skip != "tissue":
+                q = q.join(Tissue, CellMarkerEntry.tissue_id == Tissue.id).filter(
+                    Tissue.name.in_(tissue)
+                )
+                applied = True
+            if disease and skip != "disease":
+                q = q.join(Disease, CellMarkerEntry.disease_id == Disease.id).filter(
+                    Disease.name.in_(disease)
+                )
+                applied = True
+            return q.scalar_subquery() if applied else None
+
+        def _opts(model, name_col, fk_col, sq):
+            q = db.query(distinct(name_col)).join(
+                CellMarkerEntry, model.id == fk_col
+            )
+            if sq is not None:
+                q = q.filter(CellMarkerEntry.id.in_(sq))
+            return sorted(r[0] for r in q.all())
+
+        return FilterOptions(
+            cell_types=_opts(
+                CellType, CellType.name,
+                CellMarkerEntry.cell_type_id, _cross_sq(skip="cell_type"),
+            ),
+            subtypes=_opts(
+                CellSubtype, CellSubtype.name,
+                CellMarkerEntry.cell_subtype_id, _cross_sq(skip="cell_subtype"),
+            ),
+            tissues=_opts(
+                Tissue, Tissue.name,
+                CellMarkerEntry.tissue_id, _cross_sq(skip="tissue"),
+            ),
+            diseases=_opts(
+                Disease, Disease.name,
+                CellMarkerEntry.disease_id, _cross_sq(skip="disease"),
+            ),
         )
-        if sq is not None:
-            q = q.filter(CellMarkerEntry.id.in_(sq))
-        return sorted(r[0] for r in q.all())
 
-    return FilterOptions(
-        cell_types=_opts(
-            CellType, CellType.name,
-            CellMarkerEntry.cell_type_id, _cross_sq(skip="cell_type"),
-        ),
-        subtypes=_opts(
-            CellSubtype, CellSubtype.name,
-            CellMarkerEntry.cell_subtype_id, _cross_sq(skip="cell_subtype"),
-        ),
-        tissues=_opts(
-            Tissue, Tissue.name,
-            CellMarkerEntry.tissue_id, _cross_sq(skip="tissue"),
-        ),
-        diseases=_opts(
-            Disease, Disease.name,
-            CellMarkerEntry.disease_id, _cross_sq(skip="disease"),
-        ),
-    )
+    return _get_cached(cache_key, _build_filtered, ttl=120)
 
 
 def do_bubble(
