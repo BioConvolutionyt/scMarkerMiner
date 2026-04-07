@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from config.settings import EXTRACTED_DIR, ensure_dirs
 from database.models import SessionLocal, init_db
-from database.crud import get_or_create_paper, insert_cell_marker_entry
+from database.crud import get_or_create_paper, insert_cell_marker_entry, refresh_citation_counts
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +108,8 @@ class DatabaseLoader:
 
         db = SessionLocal()
         try:
+            refresh_citation_counts(db)
+
             from database.models import Paper, Marker, CellType, CellMarkerEntry
             n_papers = db.query(Paper).count()
             n_markers = db.query(Marker).count()
