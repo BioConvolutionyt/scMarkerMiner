@@ -25,7 +25,18 @@ logger = logging.getLogger(__name__)
 
 
 def refresh_citation_counts(db: Session) -> int:
-    """批量刷新 markers.citation_count = COUNT(DISTINCT paper_id)。"""
+    """批量刷新 markers.citation_count = COUNT(DISTINCT paper_id)。
+    如果列不存在会自动 ALTER TABLE 添加。
+    """
+    cols = {r[0] for r in db.execute(text("SHOW COLUMNS FROM markers")).fetchall()}
+    if "citation_count" not in cols:
+        db.execute(text(
+            "ALTER TABLE markers ADD COLUMN citation_count INT NOT NULL DEFAULT 0"
+        ))
+        db.execute(text("CREATE INDEX idx_markers_cite ON markers (citation_count)"))
+        db.commit()
+        logger.info("Added citation_count column to markers table")
+
     db.execute(text(
         "UPDATE markers m "
         "JOIN ("
