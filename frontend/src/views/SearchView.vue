@@ -140,7 +140,11 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { Download, DocumentCopy } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
+import { init as echartsInit, use } from 'echarts/core'
+import { ScatterChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, DataZoomComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+use([ScatterChart, GridComponent, TooltipComponent, DataZoomComponent, CanvasRenderer])
 import { searchMarkers, getFilters, getBubbleData, getSearchInit } from '../api'
 
 const loading = ref(false)
@@ -436,7 +440,7 @@ function buildJitteredData(data, cellTypeList) {
 
 function renderBubble(data) {
   if (!bubbleRef.value || !data.length) return
-  if (!bubbleChart) bubbleChart = echarts.init(bubbleRef.value)
+  if (!bubbleChart) bubbleChart = echartsInit(bubbleRef.value)
 
   const cellTypeList = [...new Set(data.map(d => d.cell_type))].sort()
   const maxCount = Math.max(...data.map(d => d.count), 1)
@@ -492,12 +496,25 @@ function renderBubble(data) {
   })
 }
 
-function resetFilters() {
+async function resetFilters() {
   filters.value = { cell_type: [], cell_subtype: [], tissue: [], disease: [], marker: '' }
   page.value = 1
-  lastBubbleKey = ''
-  totalKnown = false
-  fetchFilterOptions().then(() => doSearch())
+  loading.value = true
+  try {
+    const res = await getSearchInit()
+    const { filters: f, search: s, bubble: b } = res.data
+    options.value = f
+    results.value = s.results
+    total.value = s.total
+    totalKnown = true
+    allBubbleData.value = b
+    lastBubbleKey = JSON.stringify({})
+    rankingLimit.value = RANKING_PAGE_SIZE
+    await nextTick()
+    renderBubble(chartBubbleData.value)
+  } finally {
+    loading.value = false
+  }
 }
 
 function handleResize() { bubbleChart?.resize() }
