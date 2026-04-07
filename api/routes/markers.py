@@ -38,8 +38,11 @@ def do_search(
     db: Session,
     cell_type=None, cell_subtype=None, marker=None,
     tissue=None, disease=None, page=1, page_size=20,
+    total_hint: int = 0,
 ) -> MarkerSearchResponse:
-    """Core search logic, usable from both the route and the init endpoint."""
+    """Core search logic, usable from both the route and the init endpoint.
+    When total_hint > 0 the expensive count query is skipped (pagination reuse).
+    """
 
     def _apply_filters(q):
         if cell_type:
@@ -60,12 +63,15 @@ def do_search(
             )
         return q
 
-    count_q = (
-        db.query(func.count(CellMarkerEntry.id))
-        .join(Marker, CellMarkerEntry.marker_id == Marker.id)
-        .join(CellType, CellMarkerEntry.cell_type_id == CellType.id)
-    )
-    total = _apply_filters(count_q).scalar()
+    if total_hint > 0:
+        total = total_hint
+    else:
+        count_q = (
+            db.query(func.count(CellMarkerEntry.id))
+            .join(Marker, CellMarkerEntry.marker_id == Marker.id)
+            .join(CellType, CellMarkerEntry.cell_type_id == CellType.id)
+        )
+        total = _apply_filters(count_q).scalar()
 
     cite_sq = (
         db.query(
@@ -137,9 +143,11 @@ def search_markers(
     disease: Optional[list[str]] = Query(None, description="疾病类型（多选）"),
     page: int = Query(1, ge=1),
     page_size: int = Query(API_PAGE_SIZE, ge=1, le=API_MAX_PAGE_SIZE),
+    total_hint: int = Query(0, ge=0, description="已知总数，> 0 时跳过 count 查询"),
     db: Session = Depends(get_db),
 ):
-    return do_search(db, cell_type, cell_subtype, marker, tissue, disease, page, page_size)
+    return do_search(db, cell_type, cell_subtype, marker, tissue, disease,
+                     page, page_size, total_hint=total_hint)
 
 
 # =====================================================================
