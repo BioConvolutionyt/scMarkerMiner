@@ -127,7 +127,7 @@
               </div>
             </template>
             <div v-if="hasMoreRanking" class="ranking-load-more" @click="rankingLimit += RANKING_PAGE_SIZE">
-              Load more ({{ rankingTotalCount - rankingLimit }} remaining)
+              Load more ({{ rankingTotalCount - rankingRenderedCount }} remaining)
             </div>
           </div>
         </div>
@@ -196,16 +196,27 @@ const rankingGroupsFull = computed(() => {
     .sort((a, b) => b.markers.length - a.markers.length)
 })
 
+const bubbleMarkerKeys = computed(() =>
+  new Set(chartBubbleData.value.map(d => `${d.cell_type}||${d.marker}`))
+)
+
 const rankingGroups = computed(() => {
   const limit = rankingLimit.value
-  let count = 0
+  const bubbleKeys = bubbleMarkerKeys.value
+  let extraCount = 0
   const result = []
   for (const g of rankingGroupsFull.value) {
-    if (count >= limit) break
-    const remaining = limit - count
-    const sliced = g.markers.slice(0, remaining)
-    result.push({ cell_type: g.cell_type, markers: sliced })
-    count += sliced.length
+    const markers = []
+    for (const m of g.markers) {
+      const inBubble = bubbleKeys.has(`${g.cell_type}||${m.marker}`)
+      if (inBubble || extraCount < limit) {
+        markers.push(m)
+        if (!inBubble) extraCount++
+      }
+    }
+    if (markers.length > 0) {
+      result.push({ cell_type: g.cell_type, markers })
+    }
   }
   return result
 })
@@ -213,7 +224,10 @@ const rankingGroups = computed(() => {
 const rankingTotalCount = computed(() =>
   rankingGroupsFull.value.reduce((s, g) => s + g.markers.length, 0)
 )
-const hasMoreRanking = computed(() => rankingLimit.value < rankingTotalCount.value)
+const rankingRenderedCount = computed(() =>
+  rankingGroups.value.reduce((s, g) => s + g.markers.length, 0)
+)
+const hasMoreRanking = computed(() => rankingRenderedCount.value < rankingTotalCount.value)
 
 const maxRankCount = computed(() => {
   let m = 1
