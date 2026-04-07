@@ -219,6 +219,7 @@ SUBTYPE_SYNONYMS: dict[str, list[str]] = {
 
 _INVALID_SUBTYPES = {
     "null", "not specified", "n/a", "none", "na", "",
+    "natural killer",
 }
 
 
