@@ -276,7 +276,7 @@ def marker_detail(
 def _get_marker_aggregates(db: Session, symbol: str) -> dict:
     """获取单个 Marker 的聚合信息，使用 1 条 SQL + GROUP_CONCAT 完成。"""
     row = db.execute(text(
-        "SELECT m.citation_count, "
+        "SELECT m.citation_count AS citation_count, "
         "  GROUP_CONCAT(DISTINCT ct.name ORDER BY ct.name SEPARATOR '||') AS cell_types, "
         "  GROUP_CONCAT(DISTINCT cs.name ORDER BY cs.name SEPARATOR '||') AS subtypes, "
         "  GROUP_CONCAT(DISTINCT t.name ORDER BY t.name SEPARATOR '||') AS tissues, "
@@ -289,7 +289,7 @@ def _get_marker_aggregates(db: Session, symbol: str) -> dict:
         "LEFT JOIN diseases d ON e.disease_id = d.id "
         "WHERE m.symbol = :sym "
         "GROUP BY m.id"
-    ), {"sym": symbol}).first()
+    ), {"sym": symbol}).mappings().first()
 
     if not row:
         return {"citation_count": 0, "cell_types": [], "subtypes": [], "tissues": [], "diseases": []}
@@ -298,9 +298,9 @@ def _get_marker_aggregates(db: Session, symbol: str) -> dict:
         return sorted(val.split("||")) if val else []
 
     return {
-        "citation_count": row.citation_count or 0,
-        "cell_types": _split(row.cell_types),
-        "subtypes": _split(row.subtypes),
-        "tissues": _split(row.tissues),
-        "diseases": _split(row.diseases),
+        "citation_count": row["citation_count"] or 0,
+        "cell_types": _split(row["cell_types"]),
+        "subtypes": _split(row["subtypes"]),
+        "tissues": _split(row["tissues"]),
+        "diseases": _split(row["diseases"]),
     }
