@@ -16,7 +16,7 @@ PubMed/PMC (7000+ 篇)
 └─────────────────────────────────────────────────┘
     │                                    │
     ▼                                    ▼
- MySQL (SQLPub)              Vercel Serverless
+ MySQL (TiDB Cloud)              Vercel Serverless
     │                         FastAPI + Vue 3
     └──────── 查询 ───────────→  前端界面
 ```
@@ -41,7 +41,7 @@ PubMed/PMC (7000+ 篇)
 | 数据挖掘 | Python 3.11 · OpenAI API · lxml · aiohttp |
 | 后端 | FastAPI · SQLAlchemy 2.0 · PyMySQL |
 | 前端 | Vue 3 · Vite · Element Plus · ECharts |
-| 数据库 | MySQL 8.0 (本地) / SQLPub (线上) |
+| 数据库 | MySQL 8.0 (本地) / TiDB Cloud (线上) |
 | 部署 | Vercel (前端 CDN + Python Serverless) · GitHub Actions |
 
 ## 项目结构
