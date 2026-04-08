@@ -11,7 +11,7 @@ PubMed/PMC (7000+ 篇)
     │  E-utilities API
     ▼
 ┌─ Pipeline ──────────────────────────────────────┐
-│  Fetch XML → Parse → LLM Extract → HGNC Fix    │
+│  Fetch XML → Parse → LLM Extract → HGNC Fix     │
 │           → Normalize → Load DB                 │
 └─────────────────────────────────────────────────┘
     │                                    │
