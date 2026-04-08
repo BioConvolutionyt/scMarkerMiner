@@ -30,6 +30,7 @@ from config.settings import (
     SQLALCHEMY_DATABASE_URL,
     SQLALCHEMY_ECHO,
     SQLALCHEMY_POOL_SIZE,
+    DB_SSL,
 )
 
 
@@ -43,10 +44,17 @@ class Base(DeclarativeBase):
 
 _IS_SERVERLESS = os.getenv("VERCEL") == "1"
 
+_connect_args: dict = {"connect_timeout": 10}
+
+if DB_SSL:
+    import ssl as _ssl
+    _ssl_ctx = _ssl.create_default_context()
+    _connect_args["ssl"] = _ssl_ctx
+
 _engine_kwargs = dict(
     echo=SQLALCHEMY_ECHO,
     pool_pre_ping=True,
-    connect_args={"connect_timeout": 10},
+    connect_args=_connect_args,
 )
 
 if _IS_SERVERLESS:
