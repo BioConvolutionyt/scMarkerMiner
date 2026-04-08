@@ -1,7 +1,7 @@
 """
 pipeline/extractor.py — LLM 知识抽取 Agent
 
-使用 OpenAI GPT-4o-mini 从预处理文本中提取单细胞 Marker 信息。
+使用 OpenAI GPT-5.4-mini 从预处理文本中提取单细胞 Marker 信息。
 异步并发调用 + 信号量控速 + 指数退避重试 + 结构化 JSON 输出。
 """
 
