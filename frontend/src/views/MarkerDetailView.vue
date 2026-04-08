@@ -39,7 +39,7 @@
           Subtypes
         </div>
         <div class="summary-card-body">
-          <el-tag v-for="s in detail.subtypes" :key="s" class="detail-tag" type="info" round>{{ s }}</el-tag>
+          <el-tag v-for="s in detail.subtypes" :key="s" class="detail-tag subtype-tag" round>{{ s }}</el-tag>
           <span v-if="!detail.subtypes?.length" class="empty-text">—</span>
         </div>
       </div>
@@ -231,6 +231,12 @@ onMounted(async () => {
 
 .detail-tag {
   margin: 3px;
+}
+
+.subtype-tag {
+  --el-tag-bg-color: #f3e8ff;
+  --el-tag-border-color: #d8b4fe;
+  --el-tag-text-color: #7c3aed;
 }
 
 .empty-text {
